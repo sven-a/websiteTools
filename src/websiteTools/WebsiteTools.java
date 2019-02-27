@@ -8,6 +8,8 @@ import java.awt.event.KeyListener;
 
 public class WebsiteTools {
 	final static String version = "0.9";
+	final static boolean DEBUG = true;
+	static boolean ignoreQueryFragments = true;
 
 	public static void main(String[] args) {
 
@@ -44,7 +46,18 @@ public class WebsiteTools {
 				actionOnClick.start();
 			}
 		};
+		
+		ActionListener clickSiteMap = new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				SiteMapAction actionOnClick = new SiteMapAction(mygui);
+				actionOnClick.start();
+			}
+		};
+		
 		mygui.errorSearchButton.addActionListener(clickRun);
 		mygui.metaInfoButton.addActionListener(clickMetaInfo);
+		mygui.siteMapButton.addActionListener(clickSiteMap);
 	}
 }

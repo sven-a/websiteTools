@@ -2,14 +2,13 @@ package websiteTools;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
+import java.io.IOException;
 import java.net.URL;
-import java.util.Hashtable;
 import java.util.LinkedList;
 import org.jsoup.*;
 import org.jsoup.nodes.Document;
-import org.htmlparser.beans.LinkBean;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 public class MetaInfoButtonAction extends Thread {
 	WebsiteToolsGUI mygui;
@@ -40,7 +39,7 @@ public class MetaInfoButtonAction extends Thread {
 
 		// read URL from statusBar
 
-		String urlFromInput = StringFormatter.cleanURL(mygui.statusBar.getText());
+		String urlFromInput = HyperLinkFormatter.cleanURL(mygui.statusBar.getText());
 
 		LinkedList<String> crawlPages = new LinkedList<String>();
 		try {
@@ -113,27 +112,27 @@ public class MetaInfoButtonAction extends Thread {
 
 		String currentURL;
 		unCrawledPages.add(urlToCrawl);
-		subPages.add(urlToCrawl);
+		subPages.addFirst(urlToCrawl);
 		mygui.writeStatusSafely("Collecting subpages of " + urlToCrawl);
+		if (WebsiteTools.DEBUG) {System.out.println("MetaInfoAction.getAllSubPages: Collecting subpages of " + urlToCrawl);}
 
-		while (unCrawledPages.size() != 0) {
-			currentURL = unCrawledPages.poll();
+		while (!unCrawledPages.isEmpty()) {
+			currentURL = unCrawledPages.remove();
 
 			if (!stopFlag) {
 
 				try {
-					URL[] urls = getLinks(currentURL);
-					String[] urlStrings = StringFormatter.cleanURLArray(urls);
-					for (String singleURL : urlStrings) {
-						String URLString = singleURL;
-						if (URLString.startsWith(currentURL) && (!subPages.contains(URLString))) {
-							subPages.add(URLString);
-							unCrawledPages.add(URLString);
-							mygui.writeProgressSafely((subPages.size() - 1) + " Subpages found: ");
+					LinkedList<String> urls = getLinks(currentURL);
+					urls = HyperLinkFormatter.cleanURLLinkedList(urls);
+					for (String singleURL : urls) {
+						if (singleURL.startsWith(currentURL) && (!subPages.contains(singleURL))) {
+							subPages.add(singleURL);
+							unCrawledPages.add(singleURL);
+							mygui.writeProgressSafely((subPages.size()) + " Subpages found: ");
 						}
 					}
 				} catch (Exception e) {
-					System.out.println("Error with URL: " + currentURL);
+					if (WebsiteTools.DEBUG) {System.out.println("Error with URL: " + currentURL);}
 					e.printStackTrace();
 				}
 			} else {
@@ -143,75 +142,56 @@ public class MetaInfoButtonAction extends Thread {
 		}
 
 		subPages.remove(urlToCrawl);
-
+		if (WebsiteTools.DEBUG) {
+			System.out.println("MetaInfoAction.getAllSubPages found " + subPages.size() + " subpages:");
+			for (String singleURL : subPages) {
+				System.out.println(singleURL);
+			}
+		}
 		return subPages;
 	}
 
-	public ErrorsAndRedirects checkPages(String urlToCheck) throws InterruptedException {
-		Hashtable<String, Integer> errorPages = new Hashtable<String, Integer>();
-		Hashtable<String, Redirect> redirectPages = new Hashtable<String, Redirect>();
+	
 
+	public static LinkedList<String> getLinks(String url) {
+		// Use Jsoup to get a List of links from a page
+		LinkedList<String> urlList = new LinkedList<String>();
+
+		Document doc = new Document(url);
 		try {
+			doc = Jsoup.connect(url).get();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			if (WebsiteTools.DEBUG) {
+				System.out.println("getLinks connection Error");
+			} // DEBUG
 
-			// Use getLinks to return array of links from website "urlToCheck"
+		}
+		Elements links = doc.select("a[href]");
+		for (Element link : links) {
+			String currentLink = HyperLinkFormatter.cleanURL(link.attr("href"));
+			if (WebsiteTools.DEBUG) {
+				System.out.println("getLinks\nfound: " + currentLink);
+			} // DEBUG
 
-			URL[] urls = getLinks(urlToCheck);
-
-			this.mygui.writeStatusSafely("Checking " + urls.length + " links on: " + urlToCheck + "\n\n");
-
-			int currentCode;
-
-			// Iterate through the Urls
-			for (int i = 0; i < urls.length && !stopFlag; i++) {
-				try {
-					mygui.writeProgressSafely(i + " of " + urls.length);
-					// DEBUG System.out.println("testing " + urls[i]);
-
-					// see if URL was already checked and is not an image
-					if (!mygui.goodLinks.contains(urls[i].toString()) && !isImage(urls[i])) {
-
-						// Connect to the URL and add Response Code to Codes Array
-						HttpURLConnection connect = (HttpURLConnection) urls[i].openConnection();
-
-						// close the connection, if there is no response for 5/8 seconds
-						connect.setConnectTimeout(5000);
-						connect.setReadTimeout(8000);
-
-						currentCode = connect.getResponseCode();
-						if (currentCode == 200) {
-							mygui.goodLinks.add(urls[i].toString());
-						} else {
-
-							errorPages.put(urls[i].toString(), currentCode);
-
-						}
-						connect.disconnect();
-						mygui.writeProgressSafely("");
-					}
-				} catch (SocketTimeoutException ste) {
-					System.out.println("Timeout for URL: " + urls[i]);
-					errorPages.put(urls[i].toString(), 888);
-					ste.printStackTrace();
-				} catch (Exception e) {
-					System.out.println("Problems with URL: " + urls[i]);
-					errorPages.put(urls[i].toString(), 999);
-					e.printStackTrace();
+			if (!currentLink.equals("#") && !currentLink.equals("#top") && !currentLink.equals("/")
+					&& !currentLink.isEmpty()) {
+				if (currentLink.startsWith("/")) {
+					currentLink = HyperLinkFormatter.cleanURL(url) + currentLink;
 				}
+				urlList.add(currentLink);
 
 			}
-
-		} catch (Exception e) {
-			e.printStackTrace();
 		}
-		return new ErrorsAndRedirects(errorPages, redirectPages);
-	}
+		if (WebsiteTools.DEBUG) {
+			System.out.println("All links:\n");
 
-	public static URL[] getLinks(String url) {
-		// Use LinkBean class from HTMLParser to get array of links from a page
-		LinkBean lb = new LinkBean();
-		lb.setURL(url);
-		URL[] urls = lb.getLinks();
-		return urls;
+			for (String singleURL : urlList) {
+				System.out.println(singleURL);
+			}
+		}
+		return urlList;
 	}
 
 	public static String suffix(URL url) {

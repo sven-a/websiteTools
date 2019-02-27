@@ -8,8 +8,6 @@ import java.awt.FlowLayout;
 import java.awt.Image;
 import java.awt.ScrollPane;
 import java.awt.Toolkit;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -35,21 +33,32 @@ public class WebsiteToolsGUI extends JFrame {
 	JEditorPane resultsField;
 	ScrollPane scrolling;
 	String resultsHTML;
+
+	JButton siteMapButton;
 	JButton metaInfoButton;
 	JButton errorSearchButton;
 	JButton stopButton;
+
 	Checkbox recursiveBox;
 	Checkbox onlyErrorsBox;
+	Checkbox noRedirectsBox;
 
-	// keep an ArrayList of the links that work. This speeds up the recursive
-	// crawling immensely. By keeping this list in the GUI it is kept from program
+	// keep an ArrayList of the links that work and of those that are redirected.
+	// This speeds up the recursive crawling immensely.
+	// By keeping this list in the GUI it is kept from program
 	// start to end.
 	public ArrayList<String> goodLinks;
+	public Hashtable<String, Redirect> redirectedLinks;
+	public ArrayList<String> badLinks; // only for 404
+
+	// Set/initialise preferences
 
 	private static final long serialVersionUID = 1L;
 
 	WebsiteToolsGUI(String text) {
 		goodLinks = new ArrayList<String>();
+		redirectedLinks = new Hashtable<String, Redirect>();
+		badLinks = new ArrayList<String>();
 
 		JFrame window = new JFrame(text);
 
@@ -63,13 +72,7 @@ public class WebsiteToolsGUI extends JFrame {
 
 		window.setSize(screenSize.width / 2, screenSize.height / 2);
 		window.setLocationRelativeTo(null);
-		window.addWindowListener(new WindowAdapter() {
-			@Override
-			public void windowClosing(WindowEvent e) {
-				// DEBUG System.out.println("Closed");
-				e.getWindow().dispose();
-			}
-		});
+		window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 		// Top panel contains the status bar and the control panel (run and stop button
 		// and
@@ -81,6 +84,7 @@ public class WebsiteToolsGUI extends JFrame {
 		statusBar.setEditable(false);
 
 		// Control panel
+		siteMapButton = new JButton("Sitemap");
 		metaInfoButton = new JButton("Meta-Info");
 		errorSearchButton = new JButton("search Errors");
 		stopButton = new JButton("stop");
@@ -90,12 +94,15 @@ public class WebsiteToolsGUI extends JFrame {
 		checkBoxesPanel.setLayout(new BoxLayout(checkBoxesPanel, BoxLayout.Y_AXIS));
 		recursiveBox = new Checkbox("recursive Search");
 		onlyErrorsBox = new Checkbox("show only pages with errors");
+		noRedirectsBox = new Checkbox("don't list redirects");
 
 		checkBoxesPanel.add(recursiveBox);
 		checkBoxesPanel.add(onlyErrorsBox);
+		checkBoxesPanel.add(noRedirectsBox);
 
 		JPanel controlPanel = new JPanel();
 		controlPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
+		controlPanel.add(siteMapButton);
 		controlPanel.add(metaInfoButton);
 		controlPanel.add(errorSearchButton);
 		controlPanel.add(stopButton);
@@ -163,20 +170,34 @@ public class WebsiteToolsGUI extends JFrame {
 	}
 
 	public void addMetaInfoText(MetaInfo metaInfo) {
-		String resultsText = "<h2>" + StringFormatter.urlToHyperlink(metaInfo.URL) + "</h2>";
+		String resultsText = "<h2>" + ResultsFormatter.urlToHyperlink(metaInfo.URL) + "</h2>";
 
 		// list Title, Meta-Description, Meta-Keywords
 
 		resultsText += "<b>Title:</b> " + metaInfo.title + "<br>";
-		resultsText += "<b>Meta-Description:</b> " + metaInfo.description + "<br>";
-		resultsText += "<b>Meta-Keywords:</b> " + metaInfo.keyWords + "<br>";
+
+		// highlight Meta-Description that is too long or missing
+		if (metaInfo.description.isEmpty()) {
+			resultsText += "<font color=\"#ff0000\"><b>no Meta-Description</b></font> <br>";
+		} else if (metaInfo.description.length() > 160) {
+			resultsText += "<font color=\"#ff0000\"><b> Meta-Description:</b> " + metaInfo.description + "</font><br>";
+		} else {
+			resultsText += "<b>Meta-Description:</b> " + metaInfo.description + "<br>";
+		}
+
+		// highlight missing meta-keywords
+		if (metaInfo.keyWords.isEmpty()) {
+			resultsText += "<font color=\"#ff0000\"><b>no Meta-Keywords</b></font> <br>";
+		} else {
+			resultsText += "<b>Meta-Keywords:</b> " + metaInfo.keyWords + "<br>";
+		}
 
 		addResultsText(resultsText);
 	}
 
 	public void addResultsText(String url, Hashtable<String, Integer> brokenLinks,
 			Hashtable<String, Redirect> redirectLinks) {
-		String resultsText = "<h2>" + StringFormatter.urlToHyperlink(url) + "</h2>";
+		String resultsText = "<h2>" + ResultsFormatter.urlToHyperlink(url) + "</h2>";
 
 		// list broken links
 
@@ -192,19 +213,19 @@ public class WebsiteToolsGUI extends JFrame {
 		}
 
 		// list redirects
+		if (!noRedirectsBox.getState()) {
+			if (redirectLinks.isEmpty()) {
+				resultsText += "<h3 color=\"#008000\"> No redirects </h3>";
+			} else {
+				resultsText += "<h3 color=\"#daad00\"> redirects: </h3>";
+				Set<String> redirectURLs = redirectLinks.keySet();
 
-		if (redirectLinks.isEmpty()) {
-			resultsText += "<h3 color=\"#008000\"> No redirects </h3>";
-		} else {
-			resultsText += "<h3 color=\"#daad00\"> redirects: </h3>";
-			Set<String> redirectURLs = redirectLinks.keySet();
-
-			for (String singleURL : redirectURLs) {
-				resultsText += redirectLinks.get(singleURL).getCode() + " " + singleURL + " &#8614; "
-						+ redirectLinks.get(singleURL).getDestination() + "<br>";
+				for (String singleURL : redirectURLs) {
+					resultsText += redirectLinks.get(singleURL).getCode() + " " + singleURL + " &#8614; "
+							+ redirectLinks.get(singleURL).getDestination() + "<br>";
+				}
 			}
 		}
-
 		resultsText += "<hr>";
 		addResultsText(resultsText);
 	}
@@ -222,7 +243,10 @@ public class WebsiteToolsGUI extends JFrame {
 	}
 
 	public void clearResults() {
+		scrolling.removeAll(); // in case a JTree was added
+		scrolling.add(resultsField);
 		writeResultsSafely("");
+
 	}
 
 	public void displayText(String text) {
@@ -290,17 +314,27 @@ public class WebsiteToolsGUI extends JFrame {
 
 	public void buttonConfigurationWorking() {
 		// deactivate input line, meta-button and runButton, enable stopButton:
+		siteMapButton.setEnabled(false);
 		metaInfoButton.setEnabled(false);
 		errorSearchButton.setEnabled(false);
 		statusBar.setEditable(false);
 		stopButton.setEnabled(true);
+		recursiveBox.setEnabled(false);
+		onlyErrorsBox.setEnabled(false);
+		noRedirectsBox.setEnabled(false);
+
 	}
+
 	public void buttonConfigurationIdle() {
 		// enable input line, meta-button and runButton, enable stopButton:
+		siteMapButton.setEnabled(true);
 		metaInfoButton.setEnabled(true);
 		errorSearchButton.setEnabled(true);
 		statusBar.setEditable(true);
 		stopButton.setEnabled(false);
+		recursiveBox.setEnabled(true);
+		onlyErrorsBox.setEnabled(true);
+		noRedirectsBox.setEnabled(true);
 	}
 
 }

@@ -2,12 +2,18 @@ package websiteTools;
 
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.Hashtable;
 import java.util.LinkedList;
-import org.htmlparser.beans.LinkBean;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 public class ErrorSearchAction extends Thread {
 
@@ -38,13 +44,17 @@ public class ErrorSearchAction extends Thread {
 
 		// read URL from statusBar
 
-		String urlFromInput = StringFormatter.cleanURL(mygui.statusBar.getText());
+		String urlFromInput = HyperLinkFormatter.cleanURL(mygui.statusBar.getText());
 
-		LinkedList<String> crawlPages = new LinkedList<String>();
+		// LinkedList<String> crawlPages = new LinkedList<String>();
+		ConcurrentLinkedQueue<String> crawlPages = new ConcurrentLinkedQueue<String>();
 		// When "recursive" is selected, identify all subpages
 
 		try {
 			// Search for all subpages, collect them in a LinkedList and display the results
+			if (WebsiteTools.DEBUG) {
+				System.out.println("ErrorSearchAction: recursive is set to " + mygui.recursiveBox.getState());
+			}
 			if (mygui.recursiveBox.getState()) {
 
 				crawlPages = getAllSubPages(urlFromInput);
@@ -60,29 +70,55 @@ public class ErrorSearchAction extends Thread {
 					}
 				}
 			}
-			// add the initial URL to the list
-			crawlPages.addFirst(urlFromInput);
 
 			// clear results window
 			mygui.initialiseResults();
 
-			// check all links in the LinkedList and show the results immediately
-			while (!crawlPages.isEmpty()) {
-				String singleURL = crawlPages.removeFirst();
+			// check the links of the initial URL and show the results
+			// crawlPages.addFirst(urlFromInput);
+			ErrorsAndRedirects errorsRedirects = checkPages(urlFromInput);
+			if (!stopFlag) {
 
-				mygui.writeProgressRightSafely(crawlPages.size() + " pages remaining");
-				ErrorsAndRedirects errorsRedirects = checkPages(singleURL);
-				if (!stopFlag) {
+				if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
+						&& errorsRedirects.redirectPages.isEmpty()))) {
+					mygui.addResultsText(urlFromInput, errorsRedirects);
+				}
+			} else {
+				mygui.addResultsText("canceled");
+			}
 
-					if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
-							&& errorsRedirects.redirectPages.isEmpty()))) {
-						mygui.addResultsText(singleURL, errorsRedirects);
-					}
-				} else {
-					mygui.addResultsText("canceled");
-					break;
+			// if recursive box is checked: check all links in the LinkedList and show the results immediately
+			if (mygui.recursiveBox.getState()) {
+
+				// TODO: multithreading!
+				int cores = Runtime.getRuntime().availableProcessors();
+				if (WebsiteTools.DEBUG) {
+					System.out.println("number of available cores: " + cores);
 				}
 
+				for (int i = 1; i<= cores /2 ; i++) {
+					if (WebsiteTools.DEBUG) {
+						System.out.println("starting thread number " + i);
+					}
+				}
+				
+				while (!crawlPages.isEmpty()) {
+					String singleURL = crawlPages.poll();
+
+					mygui.writeProgressRightSafely(crawlPages.size() + " pages remaining");
+					errorsRedirects = checkPages(singleURL);
+					if (!stopFlag) {
+
+						if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
+								&& errorsRedirects.redirectPages.isEmpty()))) {
+							mygui.addResultsText(singleURL, errorsRedirects);
+						}
+					} else {
+						mygui.addResultsText("canceled");
+						break;
+					}
+
+				}
 			}
 
 		} catch (Exception e) {
@@ -104,43 +140,52 @@ public class ErrorSearchAction extends Thread {
 
 	}
 
-	public LinkedList<String> getAllSubPages(String urlToCrawl) {
-		LinkedList<String> subPages = new LinkedList<String>();
+	public ConcurrentLinkedQueue<String> getAllSubPages(String urlToCrawl) {
+		ConcurrentLinkedQueue<String> subPages = new ConcurrentLinkedQueue<String>();
 		LinkedList<String> unCrawledPages = new LinkedList<String>();
 
 		String currentURL;
 		unCrawledPages.add(urlToCrawl);
-		subPages.add(urlToCrawl);
+		// subPages.add(urlToCrawl);
 		mygui.writeStatusSafely("Collecting subpages of " + urlToCrawl);
+		if (WebsiteTools.DEBUG) {
+			System.out.println("ErrorSearchAction.getAllSubPages: Collecting subpages of " + urlToCrawl);
+		}
 
-		while (unCrawledPages.size() != 0) {
-			currentURL = unCrawledPages.poll();
+		while (!unCrawledPages.isEmpty()) {
+			currentURL = unCrawledPages.remove();
 
 			if (!stopFlag) {
 
 				try {
-					URL[] urls = getLinks(currentURL);
-					String[] urlStrings = StringFormatter.cleanURLArray(urls);
-					for (String singleURL : urlStrings) {
-						String URLString = singleURL;
-						if (URLString.startsWith(currentURL) && (!subPages.contains(URLString))) {
-							subPages.add(URLString);
-							unCrawledPages.add(URLString);
-							mygui.writeProgressSafely((subPages.size() - 1) + " Subpages found: ");
+					LinkedList<String> urls = getLinks(currentURL);
+					urls = HyperLinkFormatter.cleanURLLinkedList(urls);
+					for (String singleURL : urls) {
+						if (singleURL.startsWith(currentURL) && (!subPages.contains(singleURL))) {
+							subPages.add(singleURL);
+							unCrawledPages.add(singleURL);
+							mygui.writeProgressSafely((subPages.size()) + " Subpages found: ");
 						}
 					}
 				} catch (Exception e) {
-					System.out.println("Error with URL: " + currentURL);
+					if (WebsiteTools.DEBUG) {
+						System.out.println("Error with URL: " + currentURL);
+					}
 					e.printStackTrace();
 				}
 			} else {
-				subPages = new LinkedList<String>();
+				subPages = new ConcurrentLinkedQueue<String>();
 				return subPages;
 			}
 		}
 
-		subPages.remove(urlToCrawl);
-
+		// subPages.remove(urlToCrawl);
+		if (WebsiteTools.DEBUG) {
+			System.out.println("ErrorSearchAction.getAllSubPages found " + subPages.size() + " subpages:");
+			for (String singleURL : subPages) {
+				System.out.println(singleURL);
+			}
+		}
 		return subPages;
 	}
 
@@ -152,23 +197,36 @@ public class ErrorSearchAction extends Thread {
 
 			// Use getLinks to return array of links from website "urlToCheck"
 
-			URL[] urls = getLinks(urlToCheck);
+			LinkedList<String> urls = getLinks(urlToCheck);
 
-			this.mygui.writeStatusSafely("Checking " + urls.length + " links on: " + urlToCheck + "\n\n");
+			this.mygui.writeStatusSafely("Checking " + urls.size() + " links on: " + urlToCheck + "\n\n");
 
 			int currentCode;
 
 			// Iterate through the Urls
-			for (int i = 0; i < urls.length && !stopFlag; i++) {
-				try {
-					mygui.writeProgressSafely(i + " of " + urls.length);
-					// DEBUG System.out.println("testing " + urls[i]);
+			while (!stopFlag && !urls.isEmpty()) {
+				String currentURL = urls.pollFirst();
+				mygui.writeProgressSafely(urls.size() + " left");
 
-					// see if URL was already checked and is not an image
-					if (!mygui.goodLinks.contains(urls[i].toString()) && !isImage(urls[i])) {
+				if (WebsiteTools.DEBUG) {
+					System.out.println("testing " + currentURL);
+				} // DEBUG
 
+				// check if URL is already in known redirects
+				if (!mygui.redirectedLinks.isEmpty() && mygui.redirectedLinks.containsKey(currentURL)) {
+					redirectPages.put(currentURL, mygui.redirectedLinks.get(currentURL));
+				}
+
+				// check if URL is already in known badLinks
+				if (mygui.badLinks.contains(currentURL)) {
+					errorPages.put(currentURL, 404); // badLinks should only contain pages that already returned 404
+				}
+
+				if (!mygui.goodLinks.contains(currentURL) && !isImage(currentURL) && !isDocument(currentURL)) {
+					try {
 						// Connect to the URL and add Response Code to Codes Array
-						HttpURLConnection connect = (HttpURLConnection) urls[i].openConnection();
+						URL currentURLurl = new URL(currentURL);
+						HttpURLConnection connect = (HttpURLConnection) currentURLurl.openConnection();
 
 						// close the connection, if there is no response for 5/8 seconds
 						connect.setConnectTimeout(5000);
@@ -176,46 +234,84 @@ public class ErrorSearchAction extends Thread {
 
 						currentCode = connect.getResponseCode();
 						if (currentCode == 200) {
-							mygui.goodLinks.add(urls[i].toString());
+							mygui.goodLinks.add(currentURL);
 						} else {
 							// check for Redirects
 							if (currentCode == 301 || currentCode == 302) {
 
-								redirectPages.put(urls[i].toString(),
-										new Redirect(getDestinationURL(urls[i]).toString(), currentCode));
+								redirectPages.put(currentURL,
+										new Redirect(getDestinationURL(currentURLurl).toString(), currentCode));
 
 								// Everything else
 							} else {
-								errorPages.put(urls[i].toString(), currentCode);
+								if (currentCode == 404) {
+									mygui.badLinks.add(currentURL);
+								} // write Pages with 404 into badLinks, and only those with 404
+								errorPages.put(currentURL, currentCode);
 							}
 						}
 						connect.disconnect();
-						mygui.writeProgressSafely("");
+					} catch (SocketTimeoutException ste) {
+						System.out.println("Timeout for URL: " + currentURL);
+						errorPages.put(currentURL, 888);
+						ste.printStackTrace();
+					} catch (Exception e) {
+						System.out.println("Problems with URL: " + currentURL);
+						errorPages.put(currentURL, 999);
+						e.printStackTrace();
 					}
-				} catch (SocketTimeoutException ste) {
-					System.out.println("Timeout for URL: " + urls[i]);
-					errorPages.put(urls[i].toString(), 888);
-					ste.printStackTrace();
-				} catch (Exception e) {
-					System.out.println("Problems with URL: " + urls[i]);
-					errorPages.put(urls[i].toString(), 999);
-					e.printStackTrace();
 				}
-
 			}
+			mygui.writeProgressSafely("");
 
-		} catch (Exception e) {
+		} catch (
+
+		Exception e) {
 			e.printStackTrace();
+
 		}
 		return new ErrorsAndRedirects(errorPages, redirectPages);
 	}
 
-	public static URL[] getLinks(String url) {
-		// Use LinkBean class from HTMLParser to get array of links from a page
-		LinkBean lb = new LinkBean();
-		lb.setURL(url);
-		URL[] urls = lb.getLinks();
-		return urls;
+	public static LinkedList<String> getLinks(String url) {
+		// Use Jsoup to get a List of links from a page
+		if (WebsiteTools.DEBUG) {
+			System.out.println("ErrorSearchAction.getLinks getting links from " + url);
+		}
+		LinkedList<String> urlList = new LinkedList<String>();
+
+		Document doc = new Document(url);
+		try {
+			doc = Jsoup.connect(url).get();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			if (WebsiteTools.DEBUG) {
+				System.out.println("getLinks connection Error");
+			} // DEBUG
+
+		}
+		Elements links = doc.select("a[href]");
+		for (Element link : links) {
+			String currentLink = HyperLinkFormatter.cleanURL(link.attr("href"));
+
+			if (!currentLink.equals("#") && !currentLink.equals("#top") && !currentLink.equals("/")
+					&& !currentLink.isEmpty()) {
+				if (currentLink.startsWith("/")) {
+					currentLink = HyperLinkFormatter.cleanDomain(url) + currentLink;
+				}
+				urlList.add(currentLink);
+
+			}
+		}
+
+		if (WebsiteTools.DEBUG) {
+			System.out.println("\nErrorSearchAction.getLinks found: ");
+			for (String singleURL : urlList) {
+				System.out.println(singleURL);
+			}
+		}
+		return urlList;
 	}
 
 	public static URL getDestinationURL(URL url) {
@@ -241,9 +337,26 @@ public class ErrorSearchAction extends Thread {
 		return url.toString().trim().substring(length - 4, length).toLowerCase();
 	}
 
+	public static String suffix(String url) {
+		int length = url.trim().length();
+		return url.trim().substring(length - 4, length).toLowerCase();
+	}
+
 	public static boolean isImage(URL url) {
 		String suffix = suffix(url);
 		return (suffix.equals(".jpg") || suffix.equals(".gif") || suffix.equals(".png"));
 	}
+
+	public static boolean isImage(String url) {
+		String suffix = suffix(url);
+		return (suffix.equals(".jpg") || suffix.equals(".gif") || suffix.equals(".png"));
+	}
+
+	public static boolean isDocument(String url) {
+		return (url.endsWith(".doc") || url.endsWith(".docx") || url.endsWith(".pdf") || url.endsWith(".xls")
+				|| url.endsWith(".xlsx"));
+	}
+	
+	
 
 }
