@@ -12,7 +12,6 @@ import org.jsoup.select.Elements;
 
 public class MetaInfoButtonAction extends Thread {
 	WebsiteToolsGUI mygui;
-	boolean stopFlag = false; // The stopFlag will be used to quit several processes when set to true
 
 	MetaInfoButtonAction(WebsiteToolsGUI newGUI) {
 		this.mygui = newGUI;
@@ -30,7 +29,7 @@ public class MetaInfoButtonAction extends Thread {
 		ActionListener stopListener = new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				stopFlag = true;
+				mygui.stopFlag = true;
 			}
 
 		};
@@ -71,7 +70,7 @@ public class MetaInfoButtonAction extends Thread {
 
 				mygui.writeProgressRightSafely(crawlPages.size() + " pages remaining");
 				// errorsRedirects = checkPages(singleURL);
-				if (!stopFlag) {
+				if (!mygui.stopFlag) {
 					Document doc = Jsoup.connect(singleURL).get();
 					String title = doc.title();
 					String description = doc.select("meta[name=description]").get(0).attr("content");
@@ -98,7 +97,7 @@ public class MetaInfoButtonAction extends Thread {
 		mygui.writeStatusSafely(urlFromInput);
 		mygui.writeProgressRightSafely("");
 
-		if (stopFlag) {
+		if (mygui.stopFlag) {
 			mygui.writeProgressSafely("canceled");
 		} else {
 			mygui.writeProgressSafely("finished");
@@ -112,14 +111,15 @@ public class MetaInfoButtonAction extends Thread {
 
 		String currentURL;
 		unCrawledPages.add(urlToCrawl);
-		subPages.addFirst(urlToCrawl);
 		mygui.writeStatusSafely("Collecting subpages of " + urlToCrawl);
-		if (WebsiteTools.DEBUG) {System.out.println("MetaInfoAction.getAllSubPages: Collecting subpages of " + urlToCrawl);}
+		if (WebsiteTools.DEBUG) {
+			System.out.println("ErrorSearchAction.getAllSubPages: Collecting subpages of " + urlToCrawl);
+		}
 
 		while (!unCrawledPages.isEmpty()) {
 			currentURL = unCrawledPages.remove();
 
-			if (!stopFlag) {
+			if (!mygui.stopFlag) {
 
 				try {
 					LinkedList<String> urls = getLinks(currentURL);
@@ -132,18 +132,18 @@ public class MetaInfoButtonAction extends Thread {
 						}
 					}
 				} catch (Exception e) {
-					if (WebsiteTools.DEBUG) {System.out.println("Error with URL: " + currentURL);}
+					if (WebsiteTools.DEBUG) {
+						System.out.println("Error with URL: " + currentURL);
+					}
 					e.printStackTrace();
 				}
 			} else {
-				subPages = new LinkedList<String>();
 				return subPages;
 			}
 		}
 
-		subPages.remove(urlToCrawl);
 		if (WebsiteTools.DEBUG) {
-			System.out.println("MetaInfoAction.getAllSubPages found " + subPages.size() + " subpages:");
+			System.out.println("ErrorSearchAction.getAllSubPages found " + subPages.size() + " subpages:");
 			for (String singleURL : subPages) {
 				System.out.println(singleURL);
 			}
@@ -155,6 +155,9 @@ public class MetaInfoButtonAction extends Thread {
 
 	public static LinkedList<String> getLinks(String url) {
 		// Use Jsoup to get a List of links from a page
+		if (WebsiteTools.DEBUG) {
+			System.out.println("ErrorSearchAction.getLinks getting links from " + url);
+		}
 		LinkedList<String> urlList = new LinkedList<String>();
 
 		Document doc = new Document(url);
@@ -171,22 +174,19 @@ public class MetaInfoButtonAction extends Thread {
 		Elements links = doc.select("a[href]");
 		for (Element link : links) {
 			String currentLink = HyperLinkFormatter.cleanURL(link.attr("href"));
-			if (WebsiteTools.DEBUG) {
-				System.out.println("getLinks\nfound: " + currentLink);
-			} // DEBUG
 
 			if (!currentLink.equals("#") && !currentLink.equals("#top") && !currentLink.equals("/")
 					&& !currentLink.isEmpty()) {
 				if (currentLink.startsWith("/")) {
-					currentLink = HyperLinkFormatter.cleanURL(url) + currentLink;
+					currentLink = HyperLinkFormatter.cleanDomain(url) + currentLink;
 				}
 				urlList.add(currentLink);
 
 			}
 		}
-		if (WebsiteTools.DEBUG) {
-			System.out.println("All links:\n");
 
+		if (WebsiteTools.DEBUG) {
+			System.out.println("\nErrorSearchAction.getLinks found: ");
 			for (String singleURL : urlList) {
 				System.out.println(singleURL);
 			}

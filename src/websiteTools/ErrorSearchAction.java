@@ -8,7 +8,6 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.Hashtable;
 import java.util.LinkedList;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -18,10 +17,13 @@ import org.jsoup.select.Elements;
 public class ErrorSearchAction extends Thread {
 
 	WebsiteToolsGUI mygui;
-	boolean stopFlag = false; // The stopFlag will be used to quit several processes when set to true
+	// boolean stopFlag = false; // The stopFlag will be used to quit several
+	// processes when set to true
+	public volatile LinkedList<String> crawlPages;
 
 	ErrorSearchAction(WebsiteToolsGUI newGUI) {
 		this.mygui = newGUI;
+		mygui.stopFlag = false;
 	}
 
 	@Override
@@ -35,19 +37,16 @@ public class ErrorSearchAction extends Thread {
 		ActionListener stopListener = new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				stopFlag = true;
+				mygui.stopFlag = true;
 			}
-
 		};
 
 		mygui.stopButton.addActionListener(stopListener);
 
 		// read URL from statusBar
-
 		String urlFromInput = HyperLinkFormatter.cleanURL(mygui.statusBar.getText());
 
-		// LinkedList<String> crawlPages = new LinkedList<String>();
-		ConcurrentLinkedQueue<String> crawlPages = new ConcurrentLinkedQueue<String>();
+		crawlPages = new LinkedList<String>();
 		// When "recursive" is selected, identify all subpages
 
 		try {
@@ -74,52 +73,47 @@ public class ErrorSearchAction extends Thread {
 			// clear results window
 			mygui.initialiseResults();
 
-			// check the links of the initial URL and show the results
-			// crawlPages.addFirst(urlFromInput);
-			ErrorsAndRedirects errorsRedirects = checkPages(urlFromInput);
-			if (!stopFlag) {
+			// add the URL from user input to the LinkList
+			crawlPages.addFirst(urlFromInput);
 
-				if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
-						&& errorsRedirects.redirectPages.isEmpty()))) {
-					mygui.addResultsText(urlFromInput, errorsRedirects);
-				}
-			} else {
-				mygui.addResultsText("canceled");
+			// multithreading
+			int cores = Runtime.getRuntime().availableProcessors();
+			if (WebsiteTools.DEBUG) {
+				System.out.println("number of available cores: " + cores);
 			}
 
-			// if recursive box is checked: check all links in the LinkedList and show the results immediately
-			if (mygui.recursiveBox.getState()) {
+			if (cores <= 2) { // one or two cores -> just one thread
 
-				// TODO: multithreading!
-				int cores = Runtime.getRuntime().availableProcessors();
-				if (WebsiteTools.DEBUG) {
-					System.out.println("number of available cores: " + cores);
-				}
-
-				for (int i = 1; i<= cores /2 ; i++) {
-					if (WebsiteTools.DEBUG) {
-						System.out.println("starting thread number " + i);
-					}
-				}
+				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
 				
-				while (!crawlPages.isEmpty()) {
-					String singleURL = crawlPages.poll();
-
-					mygui.writeProgressRightSafely(crawlPages.size() + " pages remaining");
-					errorsRedirects = checkPages(singleURL);
-					if (!stopFlag) {
-
-						if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
-								&& errorsRedirects.redirectPages.isEmpty()))) {
-							mygui.addResultsText(singleURL, errorsRedirects);
-						}
-					} else {
-						mygui.addResultsText("canceled");
-						break;
-					}
-
-				}
+				threadOne.start();
+				threadOne.join();
+			} else if (cores <= 5) { // two threads
+				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
+				ErrorSearchThread threadTwo = new ErrorSearchThread(mygui, this);
+				
+				threadOne.start();
+				threadTwo.start();
+				threadOne.join();
+				threadTwo.join();
+			} else { // six cores or more -> four threads
+				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
+				ErrorSearchThread threadTwo = new ErrorSearchThread(mygui, this);
+				ErrorSearchThread threadThree = new ErrorSearchThread(mygui, this);
+				ErrorSearchThread threadFour = new ErrorSearchThread(mygui, this);
+				
+				threadOne.start();
+				threadTwo.start();
+				threadThree.start();
+				threadFour.start();
+				threadOne.join();
+				threadTwo.join();
+				threadThree.join();
+				threadFour.join();
+	
 			}
+
+			
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -132,7 +126,7 @@ public class ErrorSearchAction extends Thread {
 
 		// update the progress bar
 
-		if (stopFlag) {
+		if (mygui.stopFlag) {
 			mygui.writeProgressSafely("canceled");
 		} else {
 			mygui.writeProgressSafely("finished");
@@ -140,13 +134,12 @@ public class ErrorSearchAction extends Thread {
 
 	}
 
-	public ConcurrentLinkedQueue<String> getAllSubPages(String urlToCrawl) {
-		ConcurrentLinkedQueue<String> subPages = new ConcurrentLinkedQueue<String>();
+	public LinkedList<String> getAllSubPages(String urlToCrawl) {
+		LinkedList<String> subPages = new LinkedList<String>();
 		LinkedList<String> unCrawledPages = new LinkedList<String>();
 
 		String currentURL;
 		unCrawledPages.add(urlToCrawl);
-		// subPages.add(urlToCrawl);
 		mygui.writeStatusSafely("Collecting subpages of " + urlToCrawl);
 		if (WebsiteTools.DEBUG) {
 			System.out.println("ErrorSearchAction.getAllSubPages: Collecting subpages of " + urlToCrawl);
@@ -155,7 +148,7 @@ public class ErrorSearchAction extends Thread {
 		while (!unCrawledPages.isEmpty()) {
 			currentURL = unCrawledPages.remove();
 
-			if (!stopFlag) {
+			if (!mygui.stopFlag) {
 
 				try {
 					LinkedList<String> urls = getLinks(currentURL);
@@ -174,12 +167,10 @@ public class ErrorSearchAction extends Thread {
 					e.printStackTrace();
 				}
 			} else {
-				subPages = new ConcurrentLinkedQueue<String>();
 				return subPages;
 			}
 		}
 
-		// subPages.remove(urlToCrawl);
 		if (WebsiteTools.DEBUG) {
 			System.out.println("ErrorSearchAction.getAllSubPages found " + subPages.size() + " subpages:");
 			for (String singleURL : subPages) {
@@ -204,7 +195,7 @@ public class ErrorSearchAction extends Thread {
 			int currentCode;
 
 			// Iterate through the Urls
-			while (!stopFlag && !urls.isEmpty()) {
+			while (!mygui.stopFlag && !urls.isEmpty()) {
 				String currentURL = urls.pollFirst();
 				mygui.writeProgressSafely(urls.size() + " left");
 
@@ -356,7 +347,5 @@ public class ErrorSearchAction extends Thread {
 		return (url.endsWith(".doc") || url.endsWith(".docx") || url.endsWith(".pdf") || url.endsWith(".xls")
 				|| url.endsWith(".xlsx"));
 	}
-	
-	
 
 }

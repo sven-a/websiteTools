@@ -50,6 +50,7 @@ public class WebsiteToolsGUI extends JFrame {
 	public ArrayList<String> goodLinks;
 	public Hashtable<String, Redirect> redirectedLinks;
 	public ArrayList<String> badLinks; // only for 404
+	public boolean stopFlag;
 
 	// Set/initialise preferences
 
