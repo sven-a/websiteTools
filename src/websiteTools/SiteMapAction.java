@@ -32,7 +32,7 @@ public class SiteMapAction extends Thread {
 
 		};
 
-		mygui.stopButton.addActionListener(stopListener);
+		mygui.controlPanel.stopButton.addActionListener(stopListener);
 
 		// read URL from statusBar
 
@@ -42,7 +42,8 @@ public class SiteMapAction extends Thread {
 		}
 		
 		
-		// create a TreeView JTree inside 
+		// create a TreeView JTree with the URL from the input as root node
+		
 		TreeNode root = createNode(urlFromInput);
 		
 		JTree tree = new JTree(root);
@@ -64,6 +65,11 @@ public class SiteMapAction extends Thread {
 
 	}
 	
+	
+	
+	/*
+	 * This is a recursive method!
+	 */
 	private DefaultMutableTreeNode createNode(String urlToCrawl) {
 		LinkedList<String> subPages = getDirectSubPages(urlToCrawl);
 		DefaultMutableTreeNode thisNode = new DefaultMutableTreeNode(urlToCrawl);
@@ -105,5 +111,7 @@ public class SiteMapAction extends Thread {
 				}
 		return subPages;
 	}
+	
+	
 
 }

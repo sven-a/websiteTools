@@ -7,9 +7,14 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 public class WebsiteTools {
-	final static String version = "0.9";
+	final static String version = "0.9.1";
 	final static boolean DEBUG = true;
-	static boolean ignoreQueryFragments = true;
+	
+	// TODO: transform these into settings:
+	
+	static boolean ignoreQueryFragments = false;
+	static boolean trailingSlash = true;
+	Preferences preferences = new Preferences();
 
 	public static void main(String[] args) {
 
@@ -38,11 +43,14 @@ public class WebsiteTools {
 			}
 		};
 		
-		ActionListener clickRun = new ActionListener() {
+		ActionListener clickErrorSearch = new ActionListener() {
 
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				//TODO: revert to ErrorSearchAction
+				//TODO: add Listener for url search button, when implemented
 				ErrorSearchAction actionOnClick = new ErrorSearchAction(mygui);
+				//SearchLinksToDomain actionOnClick = new SearchLinksToDomain(mygui);
 				actionOnClick.start();
 			}
 		};
@@ -56,8 +64,8 @@ public class WebsiteTools {
 			}
 		};
 		
-		mygui.errorSearchButton.addActionListener(clickRun);
-		mygui.metaInfoButton.addActionListener(clickMetaInfo);
-		mygui.siteMapButton.addActionListener(clickSiteMap);
+		mygui.controlPanel.errorSearchButton.addActionListener(clickErrorSearch);
+		mygui.controlPanel.metaInfoButton.addActionListener(clickMetaInfo);
+		mygui.controlPanel.siteMapButton.addActionListener(clickSiteMap);
 	}
 }

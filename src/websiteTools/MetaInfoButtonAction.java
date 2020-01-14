@@ -34,7 +34,7 @@ public class MetaInfoButtonAction extends Thread {
 
 		};
 
-		mygui.stopButton.addActionListener(stopListener);
+		mygui.controlPanel.stopButton.addActionListener(stopListener);
 
 		// read URL from statusBar
 
@@ -44,7 +44,7 @@ public class MetaInfoButtonAction extends Thread {
 		try {
 			// When "recursive" is selected, identify all subpages, add them to the
 			// LinkedList and display results of subpage crawl
-			if (mygui.recursiveBox.getState()) {
+			if (mygui.controlPanel.recursiveBox.isSelected()) {
 				// Search for all subpages and collect them in a LinkedList
 				crawlPages = getAllSubPages(urlFromInput);
 
@@ -164,7 +164,6 @@ public class MetaInfoButtonAction extends Thread {
 		try {
 			doc = Jsoup.connect(url).get();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			if (WebsiteTools.DEBUG) {
 				System.out.println("getLinks connection Error");

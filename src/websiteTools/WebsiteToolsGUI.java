@@ -1,10 +1,8 @@
 package websiteTools;
 
 import java.awt.BorderLayout;
-import java.awt.Checkbox;
 import java.awt.Desktop;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Image;
 import java.awt.ScrollPane;
 import java.awt.Toolkit;
@@ -16,7 +14,6 @@ import java.util.Set;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.JButton;
 import javax.swing.JEditorPane;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -33,15 +30,9 @@ public class WebsiteToolsGUI extends JFrame {
 	JEditorPane resultsField;
 	ScrollPane scrolling;
 	String resultsHTML;
-
-	JButton siteMapButton;
-	JButton metaInfoButton;
-	JButton errorSearchButton;
-	JButton stopButton;
-
-	Checkbox recursiveBox;
-	Checkbox onlyErrorsBox;
-	Checkbox noRedirectsBox;
+	
+	
+	GUIControlPanel controlPanel;
 
 	// keep an ArrayList of the links that work and of those that are redirected.
 	// This speeds up the recursive crawling immensely.
@@ -53,6 +44,8 @@ public class WebsiteToolsGUI extends JFrame {
 	public boolean stopFlag;
 
 	// Set/initialise preferences
+	
+	
 
 	private static final long serialVersionUID = 1L;
 
@@ -84,31 +77,7 @@ public class WebsiteToolsGUI extends JFrame {
 		statusBar = new JTextField();
 		statusBar.setEditable(false);
 
-		// Control panel
-		siteMapButton = new JButton("Sitemap");
-		metaInfoButton = new JButton("Meta-Info");
-		errorSearchButton = new JButton("search Errors");
-		stopButton = new JButton("stop");
-		stopButton.setEnabled(false); // Stop button will only be enabled, when crawler is running
-
-		JPanel checkBoxesPanel = new JPanel();
-		checkBoxesPanel.setLayout(new BoxLayout(checkBoxesPanel, BoxLayout.Y_AXIS));
-		recursiveBox = new Checkbox("recursive Search");
-		onlyErrorsBox = new Checkbox("show only pages with errors");
-		noRedirectsBox = new Checkbox("don't list redirects");
-
-		checkBoxesPanel.add(recursiveBox);
-		checkBoxesPanel.add(onlyErrorsBox);
-		checkBoxesPanel.add(noRedirectsBox);
-
-		JPanel controlPanel = new JPanel();
-		controlPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
-		controlPanel.add(siteMapButton);
-		controlPanel.add(metaInfoButton);
-		controlPanel.add(errorSearchButton);
-		controlPanel.add(stopButton);
-
-		controlPanel.add(checkBoxesPanel);
+		controlPanel = new GUIControlPanel();
 
 		topPanel.add(statusBar);
 		topPanel.add(controlPanel);
@@ -214,7 +183,7 @@ public class WebsiteToolsGUI extends JFrame {
 		}
 
 		// list redirects
-		if (!noRedirectsBox.getState()) {
+		if (!controlPanel.noRedirectsBox.isSelected()) {
 			if (redirectLinks.isEmpty()) {
 				resultsText += "<h3 color=\"#008000\"> No redirects </h3>";
 			} else {
@@ -315,27 +284,14 @@ public class WebsiteToolsGUI extends JFrame {
 
 	public void buttonConfigurationWorking() {
 		// deactivate input line, meta-button and runButton, enable stopButton:
-		siteMapButton.setEnabled(false);
-		metaInfoButton.setEnabled(false);
-		errorSearchButton.setEnabled(false);
+		controlPanel.setControlsReady();
 		statusBar.setEditable(false);
-		stopButton.setEnabled(true);
-		recursiveBox.setEnabled(false);
-		onlyErrorsBox.setEnabled(false);
-		noRedirectsBox.setEnabled(false);
-
 	}
 
 	public void buttonConfigurationIdle() {
 		// enable input line, meta-button and runButton, enable stopButton:
-		siteMapButton.setEnabled(true);
-		metaInfoButton.setEnabled(true);
-		errorSearchButton.setEnabled(true);
+		controlPanel.setControlsIdle();
 		statusBar.setEditable(true);
-		stopButton.setEnabled(false);
-		recursiveBox.setEnabled(true);
-		onlyErrorsBox.setEnabled(true);
-		noRedirectsBox.setEnabled(true);
 	}
 
 }

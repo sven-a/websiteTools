@@ -24,20 +24,21 @@ public class ErrorSearchThread extends Thread {
 		yield();
 		ErrorsAndRedirects errorsRedirects = new ErrorsAndRedirects();
 		while (!thisAction.crawlPages.isEmpty()) {
-			String singleURL = thisAction.crawlPages.removeFirst();
+			String singleURL = thisAction.crawlPages.poll();
 			yield();
 
 			mygui.writeProgressRightSafely(thisAction.crawlPages.size() + " pages remaining");
 			try {
-				errorsRedirects = checkPages(singleURL);
+				if (singleURL != null) {errorsRedirects = checkPages(singleURL);}
+
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			if (!mygui.stopFlag) {
 
-				if (!((mygui.onlyErrorsBox.getState() && errorsRedirects.errorPages.isEmpty()
-						&& errorsRedirects.redirectPages.isEmpty()))) {
+				if (!(mygui.controlPanel.onlyErrorsBox.isSelected() && errorsRedirects.errorPages.isEmpty()
+						&& errorsRedirects.redirectPages.isEmpty()) 
+						&& singleURL != null) {
 					mygui.addResultsText(singleURL, errorsRedirects);
 				}
 			} else {

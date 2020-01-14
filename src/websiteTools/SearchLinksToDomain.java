@@ -8,21 +8,21 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.Hashtable;
 import java.util.LinkedList;
-import java.util.concurrent.LinkedBlockingDeque;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-public class ErrorSearchAction extends Thread {
+public class SearchLinksToDomain extends Thread {
 
 	WebsiteToolsGUI mygui;
 	// boolean stopFlag = false; // The stopFlag will be used to quit several
 	// processes when set to true
-	public LinkedBlockingDeque<String> crawlPages;
+	public volatile LinkedList<String> crawlPages;
 
-	ErrorSearchAction(WebsiteToolsGUI newGUI) {
+
+	SearchLinksToDomain(WebsiteToolsGUI newGUI) {
 		this.mygui = newGUI;
 		mygui.stopFlag = false;
 	}
@@ -47,7 +47,7 @@ public class ErrorSearchAction extends Thread {
 		// read URL from statusBar
 		String urlFromInput = HyperLinkFormatter.cleanURL(mygui.statusBar.getText());
 
-		crawlPages = new LinkedBlockingDeque<String>();
+		crawlPages = new LinkedList<String>();
 		// When "recursive" is selected, identify all subpages
 
 		try {
@@ -86,23 +86,23 @@ public class ErrorSearchAction extends Thread {
 
 			if (cores <= 2) { // one or two cores -> just one thread
 
-				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
+				SearchLinksToDomainThread threadOne = new SearchLinksToDomainThread(mygui, this);
 
 				threadOne.start();
 				threadOne.join();
 			} else if (cores <= 5) { // two threads
-				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
-				ErrorSearchThread threadTwo = new ErrorSearchThread(mygui, this);
+				SearchLinksToDomainThread threadOne = new SearchLinksToDomainThread(mygui, this);
+				SearchLinksToDomainThread threadTwo = new SearchLinksToDomainThread(mygui, this);
 
 				threadOne.start();
 				threadTwo.start();
 				threadOne.join();
 				threadTwo.join();
 			} else { // six cores or more -> four threads
-				ErrorSearchThread threadOne = new ErrorSearchThread(mygui, this);
-				ErrorSearchThread threadTwo = new ErrorSearchThread(mygui, this);
-				ErrorSearchThread threadThree = new ErrorSearchThread(mygui, this);
-				ErrorSearchThread threadFour = new ErrorSearchThread(mygui, this);
+				SearchLinksToDomainThread threadOne = new SearchLinksToDomainThread(mygui, this);
+				SearchLinksToDomainThread threadTwo = new SearchLinksToDomainThread(mygui, this);
+				SearchLinksToDomainThread threadThree = new SearchLinksToDomainThread(mygui, this);
+				SearchLinksToDomainThread threadFour = new SearchLinksToDomainThread(mygui, this);
 
 				threadOne.start();
 				threadTwo.start();
@@ -134,8 +134,8 @@ public class ErrorSearchAction extends Thread {
 
 	}
 
-	public LinkedBlockingDeque<String> getAllSubPages(String urlToCrawl) {
-		LinkedBlockingDeque<String> subPages = new LinkedBlockingDeque<String>();
+	public LinkedList<String> getAllSubPages(String urlToCrawl) {
+		LinkedList<String> subPages = new LinkedList<String>();
 		LinkedList<String> unCrawledPages = new LinkedList<String>();
 
 		String currentURL;
@@ -283,15 +283,15 @@ public class ErrorSearchAction extends Thread {
 		}
 		Elements links = doc.select("a[href]");
 		for (Element link : links) {
-			String currentLink = link.attr("href");
+			String currentLink = HyperLinkFormatter.cleanURL(link.attr("href"));
 
-			if (HyperLinkFormatter.isValidHyperlink(currentLink)) {
+			if (!currentLink.equals("#") && !currentLink.equals("#top") && !currentLink.equals("/")
+					&& !currentLink.isEmpty()) {
 				if (currentLink.startsWith("/")) {
 					currentLink = HyperLinkFormatter.cleanDomain(url) + currentLink;
 				}
-				if (!urlList.contains(currentLink)) {
-					urlList.add(currentLink);
-				}
+				urlList.add(currentLink);
+
 			}
 		}
 
@@ -322,9 +322,24 @@ public class ErrorSearchAction extends Thread {
 		return url;
 	}
 
+	public static String suffix(URL url) {
+		int length = url.toString().trim().length();
+		return url.toString().trim().substring(length - 4, length).toLowerCase();
+	}
+
+	public static String suffix(String url) {
+		int length = url.trim().length();
+		return url.trim().substring(length - 4, length).toLowerCase();
+	}
+
+	public static boolean isImage(URL url) {
+		String suffix = suffix(url);
+		return (suffix.equals(".jpg") || suffix.equals(".gif") || suffix.equals(".png"));
+	}
 
 	public static boolean isImage(String url) {
-		return (url.endsWith(".jpg") || url.endsWith(".gif") || url.endsWith(".png"));
+		String suffix = suffix(url);
+		return (suffix.equals(".jpg") || suffix.equals(".gif") || suffix.equals(".png"));
 	}
 
 	public static boolean isDocument(String url) {
