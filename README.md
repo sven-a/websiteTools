@@ -12,3 +12,5 @@ Currently not working as intended:
 Future ideas:
 - Search all hyperlinks to a specific URL or domain
 - Check if all images contain an alt-text
+- It will be good if we track the cookies.
+- Will merge the short url.
